@@ -1,0 +1,7 @@
+apiVersion: samplecontroller.regmarmcem.github.io/v1alpha1
+kind: Foo
+metadata:
+  name: foo-sample
+spec:
+  deploymentName: example-foo
+  replicas: 1
