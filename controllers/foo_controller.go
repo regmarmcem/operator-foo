@@ -20,7 +20,9 @@ import (
 	"context"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -82,6 +84,38 @@ func (r *FooReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return reconcile.Result{}, err
 	}
 
+	deploymentName := foo.Spec.DeploymentName
+
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      deploymentName,
+			Namespace: req.Namespace,
+		},
+	}
+	if err := r.Client.Get(
+		ctx,
+		client.ObjectKey{
+			Namespace: foo.Namespace,
+			Name:      deploymentName,
+		},
+		deployment,
+	); err != nil {
+		if errors.IsNotFound(err) {
+			reqLogger.Info("could not find existing Deployment for Foo, creating one...")
+			deployment = newDeployment(foo)
+
+			if err := r.Client.Create(ctx, deployment); err != nil {
+				reqLogger.Error(err, "failed to create Deployment resource")
+				return reconcile.Result{}, nil
+			}
+
+			reqLogger.Info("created Deployment resource for Foo")
+			return reconcile.Result{}, nil
+		}
+
+		reqLogger.Error(err, "failed to get Deployment for Foo resource")
+		return reconcile.Result{}, err
+	}
 	return ctrl.Result{}, nil
 }
 
@@ -150,4 +184,37 @@ func (r *FooReconciler) cleanupOwnedResources(ctx context.Context, foo *sampleco
 
 func labelsForFoo(name string) map[string]string {
 	return map[string]string{"app": "nginx", "controller": name}
+}
+
+func newDeployment(foo *samplecontrollerv1alpha1.Foo) *appsv1.Deployment {
+	labels := labelsForFoo(foo.Name)
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      foo.Spec.DeploymentName,
+			Namespace: foo.Namespace,
+			Labels:    labels,
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(foo, samplecontrollerv1alpha1.SchemeBuilder.GroupVersion.WithKind("Foo")),
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: foo.Spec.Replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "nginx",
+							Image: "nginx:latest",
+						},
+					},
+				},
+			},
+		},
+	}
 }
