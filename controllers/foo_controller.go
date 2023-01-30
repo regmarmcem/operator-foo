@@ -69,6 +69,7 @@ func (r *FooReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	reqLogger := log.WithValues("Request.Namespace", req.Namespace, "Request.Name", req.Name)
 	reqLogger.Info("Reconciling Foo")
 
+	// 1. Foo Objectを取得
 	foo := &samplecontrollerv1alpha1.Foo{}
 	if err := r.Client.Get(ctx, req.NamespacedName, foo); err != nil {
 		if errors.IsNotFound(err) {
@@ -79,6 +80,7 @@ func (r *FooReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return reconcile.Result{}, err
 	}
 
+	// 2. Fooが過去に管理していた古いDeploymentが存在したら削除
 	if err := r.cleanupOwnedResources(ctx, foo); err != nil {
 		reqLogger.Error(err, "failed to clean up old Deployment resources for this Foo")
 		return reconcile.Result{}, err
@@ -92,6 +94,8 @@ func (r *FooReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 			Namespace: req.Namespace,
 		},
 	}
+
+	// 3. Fooが管理するDeploymentが存在しなければ作成
 	if err := r.Client.Get(
 		ctx,
 		client.ObjectKey{
@@ -116,6 +120,20 @@ func (r *FooReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		reqLogger.Error(err, "failed to get Deployment for Foo resource")
 		return reconcile.Result{}, err
 	}
+
+	// 4. Fooが管理するDeploymentのSpecとFooのSpecを比較し、臨んだ状態でなければ調整
+	if foo.Spec.Replicas != nil && *foo.Spec.Replicas != *deployment.Spec.Replicas {
+		reqLogger.Info("unmatch spec", "foo.spec.replicas", foo.Spec.Replicas, "deployment.spec.replicas", deployment.Spec.Replicas)
+		reqLogger.Info("Deployment replicas is not equal Foo replicas. reconcile this...")
+
+		if err := r.Client.Update(ctx, newDeployment(foo)); err != nil {
+			reqLogger.Error(err, "failed to update Deployment for Foo resource")
+			return reconcile.Result{}, err
+		}
+		reqLogger.Info("updated Deployment spec for Foo")
+		return reconcile.Result{}, nil
+	}
+
 	return ctrl.Result{}, nil
 }
 
