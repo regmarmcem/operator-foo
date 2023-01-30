@@ -134,6 +134,19 @@ func (r *FooReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return reconcile.Result{}, nil
 	}
 
+	// 5. Fooのステータスを更新
+	if foo.Status.AvailableReplicas != deployment.Status.AvailableReplicas {
+		reqLogger.Info("updating Foo status")
+		foo.Status.AvailableReplicas = deployment.Status.AvailableReplicas
+
+		if err := r.Client.Update(ctx, foo); err != nil {
+			reqLogger.Error(err, "failed to update Foo status")
+			return reconcile.Result{}, err
+		}
+
+		reqLogger.Info("updated Foo status", "foo.status.availableReplicas", foo.Status.AvailableReplicas)
+	}
+
 	return ctrl.Result{}, nil
 }
 
