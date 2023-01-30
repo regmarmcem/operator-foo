@@ -21,6 +21,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -108,4 +109,39 @@ func (r *FooReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&samplecontrollerv1alpha1.Foo{}).
 		Complete(r)
+}
+
+func (r *FooReconciler) cleanupOwnedResources(ctx context.Context, foo *samplecontrollerv1alpha1.Foo) error {
+	reqLogger := log.WithValues("Request.Namespace", foo.Namespace, "Request.Name", foo.Name)
+	reqLogger.Info("finding existing Deployments for Foo resource")
+
+	deployments := &appsv1.DeploymentList{}
+	labelSelector := labels.SelectorFromSet(labelsForFoo(foo.Name))
+	listOps := &client.ListOptions{
+		Namespace:     foo.Namespace,
+		LabelSelector: labelSelector,
+	}
+	if err := r.client.List(ctx, deployments, listOps); err != nil {
+		reqLogger.Error(err, "failed to get list of deployments")
+		return err
+	}
+
+	for _, deployment := range deployments.Items {
+		if deployment.Name == foo.Spec.DeploymentName {
+			continue
+		}
+
+		if err := r.client.Delete(ctx, &deployment); err != nil {
+			reqLogger.Error(err, "failed to delete Deployment resource")
+			return err
+		}
+
+		reqLogger.Info("deleted old Deployment resource for Foo", "deploymentName", deployment.Name)
+	}
+
+	return nil
+}
+
+func labelsForFoo(name string) map[string]string {
+	return map[string]string{"app": "nginx", "controller": name}
 }
