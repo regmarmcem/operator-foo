@@ -1,0 +1,19 @@
+domain: regmarmcem.github.io
+layout:
+- go.kubebuilder.io/v3
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
+projectName: operator-foo
+repo: github.com/regmarmcem/operator-foo
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: regmarmcem.github.io
+  group: samplecontroller
+  kind: Foo
+  path: github.com/regmarmcem/operator-foo/api/v1alpha1
+  version: v1alpha1
+version: "3"
