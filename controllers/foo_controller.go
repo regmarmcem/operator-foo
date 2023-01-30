@@ -39,7 +39,7 @@ var log = logf.Log.WithName("controller_foo")
 
 // FooReconciler reconciles a Foo object
 type FooReconciler struct {
-	client client.Client
+	Client client.Client
 	Scheme *runtime.Scheme
 }
 
@@ -68,7 +68,7 @@ func (r *FooReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 	reqLogger.Info("Reconciling Foo")
 
 	foo := &samplecontrollerv1alpha1.Foo{}
-	if err := r.client.Get(ctx, req.NamespacedName, foo); err != nil {
+	if err := r.Client.Get(ctx, req.NamespacedName, foo); err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Info("Foo not found. Ignore not found")
 			return reconcile.Result{}, nil
@@ -76,6 +76,12 @@ func (r *FooReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		reqLogger.Error(err, "failed to get Foo")
 		return reconcile.Result{}, err
 	}
+
+	if err := r.cleanupOwnedResources(ctx, foo); err != nil {
+		reqLogger.Error(err, "failed to clean up old Deployment resources for this Foo")
+		return reconcile.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -121,7 +127,7 @@ func (r *FooReconciler) cleanupOwnedResources(ctx context.Context, foo *sampleco
 		Namespace:     foo.Namespace,
 		LabelSelector: labelSelector,
 	}
-	if err := r.client.List(ctx, deployments, listOps); err != nil {
+	if err := r.Client.List(ctx, deployments, listOps); err != nil {
 		reqLogger.Error(err, "failed to get list of deployments")
 		return err
 	}
@@ -131,7 +137,7 @@ func (r *FooReconciler) cleanupOwnedResources(ctx context.Context, foo *sampleco
 			continue
 		}
 
-		if err := r.client.Delete(ctx, &deployment); err != nil {
+		if err := r.Client.Delete(ctx, &deployment); err != nil {
 			reqLogger.Error(err, "failed to delete Deployment resource")
 			return err
 		}
